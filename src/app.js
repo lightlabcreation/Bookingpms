@@ -1,0 +1,74 @@
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const config = require('./config');
+const routes = require('./routes');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+
+const app = express();
+
+// Security middleware
+app.use(helmet());
+
+// CORS configuration
+app.use(cors({
+  origin: config.cors.origin,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: config.rateLimit.max,
+  message: {
+    success: false,
+    message: 'Too many requests, please try again later'
+  }
+});
+app.use('/api', limiter);
+
+// Body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Trust proxy (for getting correct IP behind reverse proxy)
+app.set('trust proxy', 1);
+
+// API routes
+app.use('/api', routes);
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Welcome to BookingPMS API',
+    version: '1.0.0',
+    documentation: '/api/health'
+  });
+});
+
+// Error handling
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+// Start server
+const PORT = config.port;
+app.listen(PORT, () => {
+  console.log(`
+╔════════════════════════════════════════════════════════════╗
+║                                                            ║
+║   BookingPMS Backend Server                                ║
+║   ─────────────────────────────────────────                ║
+║                                                            ║
+║   Environment: ${config.nodeEnv.padEnd(40)}║
+║   Port: ${PORT.toString().padEnd(47)}║
+║   API URL: http://localhost:${PORT}/api                      ║
+║                                                            ║
+╚════════════════════════════════════════════════════════════╝
+  `);
+});
+
+module.exports = app;

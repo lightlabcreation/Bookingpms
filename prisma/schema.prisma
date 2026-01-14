@@ -1,0 +1,245 @@
+// BookingPMS - Prisma Schema
+// Compatible with existing services
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum ResourceStatus {
+  AVAILABLE
+  UNAVAILABLE
+  MAINTENANCE
+}
+
+enum NotificationType {
+  BOOKING_CREATED
+  BOOKING_CANCELLED
+  BOOKING_REMINDER
+  WELCOME
+  SYSTEM
+}
+
+enum MessageType {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ==========================================
+// USER MANAGEMENT
+// ==========================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      Role     @default(USER)
+  isActive  Boolean  @default(true)
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings       Booking[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  resourceBlocks ResourceBlock[]
+  messageLogs    MessageLog[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+// ==========================================
+// RESOURCE MANAGEMENT
+// ==========================================
+
+model Resource {
+  id           String         @id @default(uuid())
+  name         String
+  description  String?        @db.Text
+  type         String
+  capacity     Int            @default(1)
+  pricePerHour Decimal        @db.Decimal(10, 2)
+  status       ResourceStatus @default(AVAILABLE)
+  imageUrl     String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Relations
+  bookings       Booking[]
+  resourceBlocks ResourceBlock[]
+
+  @@index([type])
+  @@index([status])
+  @@map("resources")
+}
+
+// ==========================================
+// BOOKING MANAGEMENT
+// ==========================================
+
+model Booking {
+  id         String        @id @default(uuid())
+  userId     String
+  resourceId String
+  startTime  DateTime
+  endTime    DateTime
+  totalPrice Decimal       @db.Decimal(10, 2)
+  status     BookingStatus @default(PENDING)
+  notes      String?       @db.Text
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([resourceId])
+  @@index([status])
+  @@index([startTime])
+  @@index([endTime])
+  @@map("bookings")
+}
+
+// ==========================================
+// RESOURCE BLOCKING (Calendar Blocks)
+// ==========================================
+
+model ResourceBlock {
+  id         String   @id @default(uuid())
+  resourceId String
+  startTime  DateTime
+  endTime    DateTime
+  reason     String?
+  createdBy  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  creator  User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([resourceId])
+  @@index([startTime])
+  @@index([endTime])
+  @@map("resource_blocks")
+}
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ==========================================
+// MESSAGE/EMAIL LOGS
+// ==========================================
+
+model MessageLog {
+  id        String        @id @default(uuid())
+  userId    String?
+  type      MessageType
+  recipient String
+  subject   String?
+  content   String        @db.Text
+  status    MessageStatus @default(PENDING)
+  error     String?       @db.Text
+  sentAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@map("message_logs")
+}
+
+// ==========================================
+// AUDIT LOGS
+// ==========================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  ipAddress String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==========================================
+// SYSTEM SETTINGS
+// ==========================================
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  type      String   @default("string")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
