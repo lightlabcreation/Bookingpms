@@ -19,7 +19,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-
 // Rate limiting
 const limiter = rateLimit({
   windowMs: config.rateLimit.windowMs,

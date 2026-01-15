@@ -6,6 +6,7 @@ const notificationRoutes = require('./notificationRoutes');
 const userRoutes = require('./userRoutes');
 const adminRoutes = require('./adminRoutes');
 const calendarRoutes = require('./calendarRoutes');
+const cloudbedsRoutes = require('./cloudbedsRoutes');
 
 const router = express.Router();
 
@@ -26,5 +27,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/users', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/calendar', calendarRoutes);
+router.use('/cloudbeds', cloudbedsRoutes);
 
 module.exports = router;

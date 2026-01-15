@@ -29,5 +29,12 @@ module.exports = {
   sms: {
     apiKey: process.env.SMS_API_KEY,
     provider: process.env.SMS_PROVIDER
+  },
+
+  // Cloudbeds API Configuration
+  cloudbeds: {
+    clientId: process.env.CLOUDBEDS_CLIENT_ID,
+    clientSecret: process.env.CLOUDBEDS_CLIENT_SECRET,
+    hotelSlug: process.env.CLOUDBEDS_HOTEL_SLUG || 'hotel'
   }
 };
