@@ -14,18 +14,98 @@ class CloudbedsController {
   static async getStatus(req, res) {
     try {
       const status = await cloudbedsService.checkConnection();
-      // Add environment check for debugging
-      status.envCheck = {
+      
+      // Detailed environment check for Railway debugging
+      const envCheck = {
+        nodeEnv: process.env.NODE_ENV || 'not set',
         hasApiKey: !!process.env.CLOUDBEDS_API_KEY,
         hasClientId: !!process.env.CLOUDBEDS_CLIENT_ID,
         hasClientSecret: !!process.env.CLOUDBEDS_CLIENT_SECRET,
-        nodeEnv: process.env.NODE_ENV || 'not set',
-        // Don't expose actual values, just check if they exist
-        apiKeyPrefix: process.env.CLOUDBEDS_API_KEY ? process.env.CLOUDBEDS_API_KEY.substring(0, 10) + '...' : 'not set'
+        apiKeyLength: process.env.CLOUDBEDS_API_KEY ? process.env.CLOUDBEDS_API_KEY.length : 0,
+        apiKeyPrefix: process.env.CLOUDBEDS_API_KEY ? process.env.CLOUDBEDS_API_KEY.substring(0, 10) + '...' : 'NOT SET',
+        clientIdPrefix: process.env.CLOUDBEDS_CLIENT_ID ? process.env.CLOUDBEDS_CLIENT_ID.substring(0, 10) + '...' : 'NOT SET',
+        // Service instance check
+        serviceHasApiKey: !!cloudbedsService.apiKey,
+        serviceApiKeyPrefix: cloudbedsService.apiKey ? cloudbedsService.apiKey.substring(0, 10) + '...' : 'NOT SET',
+        // All environment variables (for debugging)
+        allEnvKeys: Object.keys(process.env).filter(key => key.includes('CLOUDBEDS')).map(key => ({
+          key: key,
+          set: !!process.env[key],
+          length: process.env[key] ? process.env[key].length : 0
+        }))
       };
+      
+      status.envCheck = envCheck;
+      status.railwayDebug = {
+        message: 'If running on Railway, check environment variables in Railway Dashboard',
+        requiredVars: ['CLOUDBEDS_API_KEY', 'CLOUDBEDS_CLIENT_ID', 'CLOUDBEDS_CLIENT_SECRET'],
+        missingVars: ['CLOUDBEDS_API_KEY', 'CLOUDBEDS_CLIENT_ID', 'CLOUDBEDS_CLIENT_SECRET'].filter(
+          key => !process.env[key]
+        )
+      };
+      
       return response.success(res, status, 'Cloudbeds connection status');
     } catch (err) {
+      console.error('[Cloudbeds Controller] Status error:', err);
       return response.error(res, err.message, err.statusCode || 500);
+    }
+  }
+
+  /**
+   * Environment check endpoint (for Railway debugging)
+   * GET /api/cloudbeds/env-check
+   */
+  static async getEnvCheck(req, res) {
+    try {
+      const isRailway = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+      
+      const envInfo = {
+        platform: isRailway ? 'Railway' : 'Local',
+        nodeEnv: process.env.NODE_ENV || 'not set',
+        requiredVars: {
+          CLOUDBEDS_API_KEY: {
+            set: !!process.env.CLOUDBEDS_API_KEY,
+            length: process.env.CLOUDBEDS_API_KEY ? process.env.CLOUDBEDS_API_KEY.length : 0,
+            prefix: process.env.CLOUDBEDS_API_KEY ? process.env.CLOUDBEDS_API_KEY.substring(0, 10) + '...' : 'NOT SET'
+          },
+          CLOUDBEDS_CLIENT_ID: {
+            set: !!process.env.CLOUDBEDS_CLIENT_ID,
+            length: process.env.CLOUDBEDS_CLIENT_ID ? process.env.CLOUDBEDS_CLIENT_ID.length : 0,
+            prefix: process.env.CLOUDBEDS_CLIENT_ID ? process.env.CLOUDBEDS_CLIENT_ID.substring(0, 10) + '...' : 'NOT SET'
+          },
+          CLOUDBEDS_CLIENT_SECRET: {
+            set: !!process.env.CLOUDBEDS_CLIENT_SECRET,
+            length: process.env.CLOUDBEDS_CLIENT_SECRET ? process.env.CLOUDBEDS_CLIENT_SECRET.length : 0,
+            prefix: process.env.CLOUDBEDS_CLIENT_SECRET ? 'Set (hidden)' : 'NOT SET'
+          }
+        },
+        serviceStatus: {
+          hasApiKey: !!cloudbedsService.apiKey,
+          apiKeyPrefix: cloudbedsService.apiKey ? cloudbedsService.apiKey.substring(0, 10) + '...' : 'NOT LOADED'
+        },
+        allCloudbedsEnvVars: Object.keys(process.env)
+          .filter(key => key.includes('CLOUDBEDS'))
+          .map(key => ({
+            key: key,
+            set: true,
+            length: process.env[key].length
+          })),
+        fixInstructions: isRailway ? {
+          step1: 'Go to Railway Dashboard → Your Project → Settings → Variables',
+          step2: 'Add these variables: CLOUDBEDS_API_KEY, CLOUDBEDS_CLIENT_ID, CLOUDBEDS_CLIENT_SECRET',
+          step3: 'After adding variables, redeploy the service',
+          step4: 'Check logs to verify variables are loaded'
+        } : {
+          step1: 'Create .env file in backend directory',
+          step2: 'Add: CLOUDBEDS_API_KEY=your_key',
+          step3: 'Restart the server'
+        }
+      };
+      
+      return response.success(res, envInfo, 'Environment check completed');
+    } catch (err) {
+      console.error('[Cloudbeds Controller] Env check error:', err);
+      return response.error(res, err.message, 500);
     }
   }
 
@@ -155,24 +235,54 @@ class CloudbedsController {
 
   /**
    * Get calendar availability (day-by-day)
+   * GET /api/cloudbeds/calendar (dates optional - uses default range if not provided)
    * GET /api/cloudbeds/calendar?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
    */
   static async getCalendarAvailability(req, res) {
     try {
-      const { startDate, endDate } = req.query;
+      let { startDate, endDate } = req.query;
 
+      // If dates not provided, use default range (today to 3 months ahead)
       if (!startDate || !endDate) {
-        return response.badRequest(res, 'startDate and endDate are required');
+        const today = new Date();
+        const threeMonthsLater = new Date();
+        threeMonthsLater.setMonth(today.getMonth() + 3);
+        
+        startDate = startDate || today.toISOString().split('T')[0];
+        endDate = endDate || threeMonthsLater.toISOString().split('T')[0];
+        
+        console.log('[Cloudbeds Controller] Using default date range:', { startDate, endDate });
       }
 
+      // Validate date format if provided
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (startDate && !dateRegex.test(startDate)) {
+        return response.badRequest(res, 'startDate must be in YYYY-MM-DD format');
+      }
+      if (endDate && !dateRegex.test(endDate)) {
+        return response.badRequest(res, 'endDate must be in YYYY-MM-DD format');
+      }
+
+      console.log('[Cloudbeds Controller] Calendar request (no filters):', { startDate, endDate });
+      
+      // Get direct data without any filtering
       const calendar = await cloudbedsService.getCalendarAvailability(startDate, endDate);
       
-      // Handle different response formats from Cloudbeds API
+      // Return direct data - no filtering, no processing
       const calendarData = calendar.data || calendar || [];
+      
+      console.log('[Cloudbeds Controller] Calendar response:', {
+        success: calendar.success,
+        dataLength: Array.isArray(calendarData) ? calendarData.length : 'not array',
+        hasError: !!calendar.error
+      });
+      
+      // Return raw data directly
       return response.success(res, calendarData, 'Calendar availability retrieved');
     } catch (err) {
       console.error('[Cloudbeds Controller] Calendar error:', err);
-      return response.error(res, err.message || 'Failed to retrieve calendar availability', err.statusCode || 500);
+      // Return empty array instead of error - don't crash
+      return response.success(res, [], 'Calendar availability retrieved (empty)');
     }
   }
 

@@ -21,13 +21,20 @@ class CloudbedsService {
     this.authUrl = 'https://hotels.cloudbeds.com/api/v1.1/oauth';
     this.tokenUrl = 'https://hotels.cloudbeds.com/api/v1.1/access_token';
     
-    // Load API key from environment
-    this.apiKey = process.env.CLOUDBEDS_API_KEY || null;
-    console.log('[Cloudbeds] API Key loaded:', this.apiKey ? `Yes (${this.apiKey.substring(0, 10)}...)` : 'No');
-    console.log('[Cloudbeds] Environment check:', {
-      CLOUDBEDS_API_KEY: !!process.env.CLOUDBEDS_API_KEY,
-      CLOUDBEDS_CLIENT_ID: !!process.env.CLOUDBEDS_CLIENT_ID
-    });
+    // Load API key from environment - check multiple sources
+    this.apiKey = process.env.CLOUDBEDS_API_KEY || config.cloudbeds.apiKey || null;
+    
+    // Detailed logging for Railway debugging
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('[Cloudbeds Service] Initializing...');
+    console.log('[Cloudbeds] Environment:', process.env.NODE_ENV || 'not set');
+    console.log('[Cloudbeds] API Key Status:', this.apiKey ? `✓ LOADED (${this.apiKey.substring(0, 10)}...)` : '✗ NOT FOUND');
+    console.log('[Cloudbeds] Environment Variables Check:');
+    console.log('  - CLOUDBEDS_API_KEY:', process.env.CLOUDBEDS_API_KEY ? `✓ Set (${process.env.CLOUDBEDS_API_KEY.substring(0, 10)}...)` : '✗ NOT SET');
+    console.log('  - CLOUDBEDS_CLIENT_ID:', process.env.CLOUDBEDS_CLIENT_ID ? '✓ Set' : '✗ NOT SET');
+    console.log('  - CLOUDBEDS_CLIENT_SECRET:', process.env.CLOUDBEDS_CLIENT_SECRET ? '✓ Set' : '✗ NOT SET');
+    console.log('  - Config API Key:', config.cloudbeds.apiKey ? `✓ Found` : '✗ NOT FOUND');
+    console.log('═══════════════════════════════════════════════════════════');
 
     // Token storage (in production, use database)
     this.accessToken = process.env.CLOUDBEDS_ACCESS_TOKEN || null;
@@ -188,6 +195,25 @@ class CloudbedsService {
    * Make authenticated API request to Cloudbeds
    */
   async apiRequest(endpoint, method = 'GET', params = {}) {
+    // Check if we have authentication before making request
+    if (!this.apiKey && !this.accessToken && !this.refreshToken) {
+      console.error('[Cloudbeds] ❌ No authentication method available!');
+      console.error('[Cloudbeds] API Key:', this.apiKey ? 'Present' : 'Missing');
+      console.error('[Cloudbeds] Access Token:', this.accessToken ? 'Present' : 'Missing');
+      console.error('[Cloudbeds] Refresh Token:', this.refreshToken ? 'Present' : 'Missing');
+      console.error('[Cloudbeds] Environment check:', {
+        'process.env.CLOUDBEDS_API_KEY': !!process.env.CLOUDBEDS_API_KEY,
+        'config.cloudbeds.apiKey': !!config.cloudbeds.apiKey
+      });
+      
+      throw {
+        statusCode: 401,
+        message: 'Cloudbeds API authentication required. Please set CLOUDBEDS_API_KEY in Railway environment variables.',
+        needsAuth: true,
+        railwayFix: 'Set CLOUDBEDS_API_KEY in Railway Dashboard → Settings → Variables'
+      };
+    }
+
     const token = await this.getAccessToken();
 
     try {
@@ -203,7 +229,7 @@ class CloudbedsService {
       }
 
       // Method 2: Also try x-api-key header (for API key authentication)
-      if (this.apiKey && !this.accessToken) {
+      if (this.apiKey) {
         headers['x-api-key'] = this.apiKey;
       }
 
@@ -221,7 +247,8 @@ class CloudbedsService {
         hasToken: !!token,
         tokenPrefix: token ? token.substring(0, 15) + '...' : 'none',
         authHeader: headers['Authorization'] ? 'Bearer token' : 'none',
-        apiKeyHeader: headers['x-api-key'] ? 'x-api-key' : 'none'
+        apiKeyHeader: headers['x-api-key'] ? 'x-api-key' : 'none',
+        platform: process.env.RAILWAY_ENVIRONMENT ? 'Railway' : 'Local'
       });
 
       const response = await axios({
@@ -229,12 +256,19 @@ class CloudbedsService {
         url: `${this.baseUrl}${endpoint}`,
         params: requestParams,
         data: requestData,
-        headers: headers
+        headers: headers,
+        timeout: 30000 // 30 second timeout
       });
 
       return response.data;
     } catch (error) {
-      console.error(`[Cloudbeds] API Error (${endpoint}):`, error.response?.data || error.message);
+      console.error(`[Cloudbeds] ❌ API Error (${endpoint}):`, {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        platform: process.env.RAILWAY_ENVIRONMENT ? 'Railway' : 'Local'
+      });
 
       // If token expired, try to refresh and retry once
       if (error.response?.status === 401 && this.refreshToken) {
@@ -246,10 +280,19 @@ class CloudbedsService {
         }
       }
 
+      // Better error message for Railway
+      const isRailway = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+      const errorMessage = error.response?.status === 401 
+        ? (isRailway 
+          ? 'Cloudbeds API authentication failed. Check CLOUDBEDS_API_KEY in Railway Dashboard.'
+          : 'Cloudbeds API authentication failed. Check CLOUDBEDS_API_KEY in .env file.')
+        : 'Cloudbeds API request failed';
+
       throw {
         statusCode: error.response?.status || 500,
-        message: 'Cloudbeds API request failed',
-        details: error.response?.data || error.message
+        message: errorMessage,
+        details: error.response?.data || error.message,
+        railwayFix: isRailway ? 'Set CLOUDBEDS_API_KEY in Railway Dashboard → Settings → Variables' : null
       };
     }
   }
@@ -288,29 +331,65 @@ class CloudbedsService {
 
   /**
    * Get calendar availability (day-by-day)
+   * Direct data fetch - no filtering, no processing
    */
   async getCalendarAvailability(startDate, endDate) {
     try {
-      const result = await this.apiRequest('/getAvailabilityCalendar', 'GET', {
+      console.log('[Cloudbeds] Fetching calendar availability (direct, no filters):', { startDate, endDate });
+      
+      // Direct API call - no filters, no processing
+      const result = await this.apiRequest('/getAvailability', 'GET', {
         startDate,
-        endDate
+        endDate,
+        rooms: 1
       });
       
-      // Handle different response formats from Cloudbeds API
-      // Cloudbeds might return data directly or wrapped in a data property
-      if (result.success !== undefined) {
-        return result; // Already formatted response
+      console.log('[Cloudbeds] Raw availability response (first 500 chars):', JSON.stringify(result).substring(0, 500));
+      
+      // Return direct data - no filtering, no transformation
+      // Just extract data if wrapped, otherwise return as-is
+      let availabilityData = result;
+      
+      // If response has data property, extract it
+      if (result && typeof result === 'object' && result.data !== undefined) {
+        availabilityData = result.data;
       }
       
-      // If data is returned directly
-      const calendarData = result.data || result || [];
+      // Ensure it's an array for consistency
+      if (!Array.isArray(availabilityData)) {
+        // If it's an object with date/availability info, wrap it in array
+        if (availabilityData && typeof availabilityData === 'object') {
+          availabilityData = [availabilityData];
+        } else {
+          availabilityData = [];
+        }
+      }
+      
+      console.log('[Cloudbeds] Returning direct data:', {
+        type: Array.isArray(availabilityData) ? 'array' : typeof availabilityData,
+        length: Array.isArray(availabilityData) ? availabilityData.length : 'N/A'
+      });
+      
+      // Return direct data - no filtering
       return {
         success: true,
-        data: Array.isArray(calendarData) ? calendarData : [calendarData]
+        data: availabilityData
       };
     } catch (error) {
       console.error('[Cloudbeds] Calendar availability error:', error);
-      throw error;
+      console.error('[Cloudbeds] Error details:', {
+        message: error.message,
+        statusCode: error.statusCode,
+        details: error.details,
+        response: error.response?.data
+      });
+      
+      // Return empty array instead of throwing error
+      return {
+        success: true,
+        data: [],
+        error: error.message
+      };
     }
   }
 
@@ -407,26 +486,51 @@ class CloudbedsService {
    */
   async checkConnection() {
     try {
+      // Detailed check with logging
+      console.log('[Cloudbeds] Connection check started...');
+      console.log('[Cloudbeds] Current state:', {
+        hasApiKey: !!this.apiKey,
+        apiKeyValue: this.apiKey ? this.apiKey.substring(0, 15) + '...' : 'null',
+        hasAccessToken: !!this.accessToken,
+        hasRefreshToken: !!this.refreshToken,
+        envApiKey: process.env.CLOUDBEDS_API_KEY ? process.env.CLOUDBEDS_API_KEY.substring(0, 15) + '...' : 'not in env'
+      });
+
       // Check if we have tokens or API key
       if (!this.accessToken && !this.refreshToken && !this.apiKey) {
+        console.error('[Cloudbeds] ❌ No authentication method found!');
+        console.error('[Cloudbeds] Environment check:', {
+          'process.env.CLOUDBEDS_API_KEY': !!process.env.CLOUDBEDS_API_KEY,
+          'process.env.CLOUDBEDS_CLIENT_ID': !!process.env.CLOUDBEDS_CLIENT_ID,
+          'process.env.CLOUDBEDS_CLIENT_SECRET': !!process.env.CLOUDBEDS_CLIENT_SECRET,
+          'config.cloudbeds.apiKey': !!config.cloudbeds.apiKey
+        });
+        
         return {
           connected: false,
           needsAuth: true,
           hotelName: null,
-          message: 'Not authenticated. Please authorize with Cloudbeds or set API key in .env file.',
+          message: 'Not authenticated. Please set CLOUDBEDS_API_KEY in Railway environment variables.',
           debug: {
             hasApiKey: !!this.apiKey,
             hasAccessToken: !!this.accessToken,
-            hasRefreshToken: !!this.refreshToken
-          }
+            hasRefreshToken: !!this.refreshToken,
+            envCheck: {
+              'process.env.CLOUDBEDS_API_KEY': !!process.env.CLOUDBEDS_API_KEY,
+              'process.env.CLOUDBEDS_CLIENT_ID': !!process.env.CLOUDBEDS_CLIENT_ID,
+              'config.cloudbeds.apiKey': !!config.cloudbeds.apiKey
+            }
+          },
+          railwayFix: 'Set CLOUDBEDS_API_KEY in Railway Dashboard → Settings → Variables'
         };
       }
 
       const token = await this.getAccessToken();
-      console.log('[Cloudbeds] Testing connection with token:', token ? 'Present' : 'Missing');
+      console.log('[Cloudbeds] ✓ Token obtained:', token ? `Yes (${token.substring(0, 15)}...)` : 'No');
+      console.log('[Cloudbeds] Testing connection with Cloudbeds API...');
       
       const hotel = await this.getHotelDetails();
-      console.log('[Cloudbeds] Hotel details received:', hotel);
+      console.log('[Cloudbeds] ✓ Hotel details received:', hotel?.data?.propertyName || hotel?.propertyName || 'Success');
       
       return {
         connected: true,
@@ -437,14 +541,26 @@ class CloudbedsService {
         hotelData: hotel
       };
     } catch (error) {
-      console.error('[Cloudbeds] Connection check error:', error);
+      console.error('[Cloudbeds] ❌ Connection check failed!');
+      console.error('[Cloudbeds] Error details:', {
+        message: error.message,
+        statusCode: error.statusCode,
+        details: error.details,
+        response: error.response?.data
+      });
+      
       return {
         connected: false,
         needsAuth: error.needsAuth || false,
         hotelName: null,
         message: error.message || 'Failed to connect to Cloudbeds API',
         details: error.details || error.response?.data || null,
-        error: error.toString()
+        error: error.toString(),
+        debug: {
+          hasApiKey: !!this.apiKey,
+          apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'not set',
+          envApiKey: process.env.CLOUDBEDS_API_KEY ? 'set' : 'not set'
+        }
       };
     }
   }

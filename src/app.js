@@ -74,14 +74,32 @@ app.use(errorHandler);
 // Start server
 const PORT = config.port;
 app.listen(PORT, () => {
-  // Log environment variables status (for debugging)
-  console.log('\n[Environment Check]');
-  console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
-  console.log('CLOUDBEDS_API_KEY:', process.env.CLOUDBEDS_API_KEY ? `Set (${process.env.CLOUDBEDS_API_KEY.substring(0, 10)}...)` : 'NOT SET');
-  console.log('CLOUDBEDS_CLIENT_ID:', process.env.CLOUDBEDS_CLIENT_ID ? 'Set' : 'NOT SET');
-  console.log('CLOUDBEDS_CLIENT_SECRET:', process.env.CLOUDBEDS_CLIENT_SECRET ? 'Set' : 'NOT SET');
-  console.log('FRONTEND_URL:', process.env.FRONTEND_URL || 'not set');
-  console.log('\n');
+  // Detailed environment variables check for Railway debugging
+  const isRailway = process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID;
+  const envStatus = {
+    NODE_ENV: process.env.NODE_ENV || 'not set',
+    CLOUDBEDS_API_KEY: process.env.CLOUDBEDS_API_KEY ? `✓ Set (${process.env.CLOUDBEDS_API_KEY.substring(0, 10)}...)` : '✗ NOT SET',
+    CLOUDBEDS_CLIENT_ID: process.env.CLOUDBEDS_CLIENT_ID ? '✓ Set' : '✗ NOT SET',
+    CLOUDBEDS_CLIENT_SECRET: process.env.CLOUDBEDS_CLIENT_SECRET ? '✓ Set' : '✗ NOT SET',
+    FRONTEND_URL: process.env.FRONTEND_URL || 'not set',
+    DATABASE_URL: process.env.DATABASE_URL ? '✓ Set' : '✗ NOT SET',
+    RAILWAY_ENV: isRailway ? '✓ Running on Railway' : '✗ Not Railway'
+  };
+  
+  console.log('\n═══════════════════════════════════════════════════════════');
+  console.log('[Environment Check]');
+  console.log('═══════════════════════════════════════════════════════════');
+  Object.entries(envStatus).forEach(([key, value]) => {
+    console.log(`${key.padEnd(25)}: ${value}`);
+  });
+  console.log('═══════════════════════════════════════════════════════════\n');
+  
+  // Warning if Cloudbeds API key is missing
+  if (!process.env.CLOUDBEDS_API_KEY) {
+    console.warn('⚠️  WARNING: CLOUDBEDS_API_KEY is not set!');
+    console.warn('   Cloudbeds API will not work until this is set in Railway Dashboard.');
+    console.warn('   Go to: Railway Dashboard → Settings → Variables → Add CLOUDBEDS_API_KEY\n');
+  }
   
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
@@ -92,6 +110,7 @@ app.listen(PORT, () => {
 ║   Environment: ${config.nodeEnv.padEnd(40)}║
 ║   Port: ${PORT.toString().padEnd(47)}║
 ║   API URL: http://localhost:${PORT}/api                      ║
+║   Platform: ${isRailway ? 'Railway' : 'Local'}`.padEnd(60) + `║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
   `);

@@ -17,6 +17,9 @@ const router = express.Router();
 // Connection status (useful for debugging)
 router.get('/status', CloudbedsController.getStatus);
 
+// Environment check endpoint (for Railway debugging)
+router.get('/env-check', CloudbedsController.getEnvCheck);
+
 // Booking URL generator (public - guests need this)
 router.get('/booking-url', CloudbedsController.getBookingUrl);
 
