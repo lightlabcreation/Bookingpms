@@ -12,7 +12,11 @@ module.exports = {
   cors: {
     origin: process.env.FRONTEND_URL 
       ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
-      : ['http://localhost:5173', 'https://bookingpms.netlify.app'],
+      : [
+          'http://localhost:5173',
+          'https://bookingpms.netlify.app',
+          'https://bookingpms.netlify.app/'
+        ],
     credentials: true
   },
 

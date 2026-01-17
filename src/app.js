@@ -74,6 +74,15 @@ app.use(errorHandler);
 // Start server
 const PORT = config.port;
 app.listen(PORT, () => {
+  // Log environment variables status (for debugging)
+  console.log('\n[Environment Check]');
+  console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
+  console.log('CLOUDBEDS_API_KEY:', process.env.CLOUDBEDS_API_KEY ? `Set (${process.env.CLOUDBEDS_API_KEY.substring(0, 10)}...)` : 'NOT SET');
+  console.log('CLOUDBEDS_CLIENT_ID:', process.env.CLOUDBEDS_CLIENT_ID ? 'Set' : 'NOT SET');
+  console.log('CLOUDBEDS_CLIENT_SECRET:', process.env.CLOUDBEDS_CLIENT_SECRET ? 'Set' : 'NOT SET');
+  console.log('FRONTEND_URL:', process.env.FRONTEND_URL || 'not set');
+  console.log('\n');
+  
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
