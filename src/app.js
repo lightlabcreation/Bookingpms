@@ -13,7 +13,7 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: 'https://bookingpms.netlify.app',
+  origin: config.cors.origin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

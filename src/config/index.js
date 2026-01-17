@@ -35,6 +35,7 @@ module.exports = {
   cloudbeds: {
     clientId: process.env.CLOUDBEDS_CLIENT_ID,
     clientSecret: process.env.CLOUDBEDS_CLIENT_SECRET,
+    apiKey: process.env.CLOUDBEDS_API_KEY,
     hotelSlug: process.env.CLOUDBEDS_HOTEL_SLUG || 'hotel'
   }
 };

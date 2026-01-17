@@ -16,9 +16,18 @@ const config = require('../config');
  */
 class CloudbedsService {
   constructor() {
+    // Cloudbeds API v1.1 endpoints
     this.baseUrl = 'https://hotels.cloudbeds.com/api/v1.1';
     this.authUrl = 'https://hotels.cloudbeds.com/api/v1.1/oauth';
     this.tokenUrl = 'https://hotels.cloudbeds.com/api/v1.1/access_token';
+    
+    // Load API key from environment
+    this.apiKey = process.env.CLOUDBEDS_API_KEY || null;
+    console.log('[Cloudbeds] API Key loaded:', this.apiKey ? `Yes (${this.apiKey.substring(0, 10)}...)` : 'No');
+    console.log('[Cloudbeds] Environment check:', {
+      CLOUDBEDS_API_KEY: !!process.env.CLOUDBEDS_API_KEY,
+      CLOUDBEDS_CLIENT_ID: !!process.env.CLOUDBEDS_CLIENT_ID
+    });
 
     // Token storage (in production, use database)
     this.accessToken = process.env.CLOUDBEDS_ACCESS_TOKEN || null;
@@ -140,8 +149,14 @@ class CloudbedsService {
 
   /**
    * Get valid access token (refresh if needed)
+   * If API key is available, use it directly
    */
   async getAccessToken() {
+    // If API key is available, use it directly (for API key authentication)
+    if (this.apiKey) {
+      return this.apiKey;
+    }
+
     // Return cached token if still valid (with 5 min buffer)
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry - 300000) {
       return this.accessToken;
@@ -155,7 +170,7 @@ class CloudbedsService {
     // No valid tokens
     throw {
       statusCode: 401,
-      message: 'Not authenticated with Cloudbeds. Please authorize the app.',
+      message: 'Not authenticated with Cloudbeds. Please authorize the app or set API key.',
       needsAuth: true
     };
   }
@@ -176,14 +191,45 @@ class CloudbedsService {
     const token = await this.getAccessToken();
 
     try {
+      // Cloudbeds API requires Authorization header
+      // Try multiple authentication methods
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+
+      // Method 1: Try Bearer token in Authorization header
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // Method 2: Also try x-api-key header (for API key authentication)
+      if (this.apiKey && !this.accessToken) {
+        headers['x-api-key'] = this.apiKey;
+      }
+
+      // For GET requests, also try access_token in query params (v1.1 fallback)
+      const requestParams = method === 'GET' 
+        ? { ...params, access_token: token }
+        : {};
+
+      // For POST/PUT requests, include access_token in body if needed
+      const requestData = method !== 'GET' 
+        ? { ...params, access_token: token }
+        : undefined;
+
+      console.log(`[Cloudbeds] API Request: ${method} ${endpoint}`, {
+        hasToken: !!token,
+        tokenPrefix: token ? token.substring(0, 15) + '...' : 'none',
+        authHeader: headers['Authorization'] ? 'Bearer token' : 'none',
+        apiKeyHeader: headers['x-api-key'] ? 'x-api-key' : 'none'
+      });
+
       const response = await axios({
         method,
         url: `${this.baseUrl}${endpoint}`,
-        params: method === 'GET' ? { ...params, access_token: token } : { access_token: token },
-        data: method !== 'GET' ? params : undefined,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        params: requestParams,
+        data: requestData,
+        headers: headers
       });
 
       return response.data;
@@ -244,10 +290,28 @@ class CloudbedsService {
    * Get calendar availability (day-by-day)
    */
   async getCalendarAvailability(startDate, endDate) {
-    return this.apiRequest('/getAvailabilityCalendar', 'GET', {
-      startDate,
-      endDate
-    });
+    try {
+      const result = await this.apiRequest('/getAvailabilityCalendar', 'GET', {
+        startDate,
+        endDate
+      });
+      
+      // Handle different response formats from Cloudbeds API
+      // Cloudbeds might return data directly or wrapped in a data property
+      if (result.success !== undefined) {
+        return result; // Already formatted response
+      }
+      
+      // If data is returned directly
+      const calendarData = result.data || result || [];
+      return {
+        success: true,
+        data: Array.isArray(calendarData) ? calendarData : [calendarData]
+      };
+    } catch (error) {
+      console.error('[Cloudbeds] Calendar availability error:', error);
+      throw error;
+    }
   }
 
   /**
@@ -275,16 +339,24 @@ class CloudbedsService {
     try {
       const calendar = await this.getCalendarAvailability(startDate, endDate);
 
-      if (!calendar.success || !calendar.data) {
-        return { success: false, data: [], message: 'No availability data', totalGaps: 0 };
+      // Handle different response formats
+      const calendarData = calendar.data || calendar || [];
+      const days = Array.isArray(calendarData) ? calendarData : [];
+
+      if (days.length === 0) {
+        return { success: true, data: [], message: 'No availability data', totalGaps: 0 };
       }
 
       const gaps = [];
       let currentGap = null;
 
-      for (const day of calendar.data) {
-        const date = day.date;
-        const available = day.roomsAvailable > 0;
+      for (const day of days) {
+        // Handle different date field names
+        const date = day.date || day.Date || day.checkInDate;
+        const roomsAvailable = day.roomsAvailable || day.rooms_available || day.availableRooms || 0;
+        const available = roomsAvailable > 0;
+
+        if (!date) continue; // Skip if no date field
 
         if (available) {
           if (!currentGap) {
@@ -292,12 +364,12 @@ class CloudbedsService {
               startDate: date,
               endDate: date,
               nights: 1,
-              roomsAvailable: day.roomsAvailable
+              roomsAvailable: roomsAvailable
             };
           } else {
             currentGap.endDate = date;
             currentGap.nights++;
-            currentGap.roomsAvailable = Math.min(currentGap.roomsAvailable, day.roomsAvailable);
+            currentGap.roomsAvailable = Math.min(currentGap.roomsAvailable, roomsAvailable);
           }
         } else {
           if (currentGap && currentGap.nights >= minNights) {
@@ -335,39 +407,53 @@ class CloudbedsService {
    */
   async checkConnection() {
     try {
-      // Check if we have tokens
-      if (!this.accessToken && !this.refreshToken) {
+      // Check if we have tokens or API key
+      if (!this.accessToken && !this.refreshToken && !this.apiKey) {
         return {
           connected: false,
           needsAuth: true,
           hotelName: null,
-          message: 'Not authenticated. Please authorize with Cloudbeds first.'
+          message: 'Not authenticated. Please authorize with Cloudbeds or set API key in .env file.',
+          debug: {
+            hasApiKey: !!this.apiKey,
+            hasAccessToken: !!this.accessToken,
+            hasRefreshToken: !!this.refreshToken
+          }
         };
       }
 
-      await this.getAccessToken();
+      const token = await this.getAccessToken();
+      console.log('[Cloudbeds] Testing connection with token:', token ? 'Present' : 'Missing');
+      
       const hotel = await this.getHotelDetails();
+      console.log('[Cloudbeds] Hotel details received:', hotel);
+      
       return {
         connected: true,
         needsAuth: false,
-        hotelName: hotel.data?.propertyName || 'Unknown',
-        message: 'Successfully connected to Cloudbeds API'
+        hotelName: hotel.data?.propertyName || hotel.propertyName || hotel.property_name || 'Unknown',
+        message: 'Successfully connected to Cloudbeds API',
+        authMethod: this.apiKey ? 'API Key' : 'OAuth Token',
+        hotelData: hotel
       };
     } catch (error) {
+      console.error('[Cloudbeds] Connection check error:', error);
       return {
         connected: false,
         needsAuth: error.needsAuth || false,
         hotelName: null,
-        message: error.message || 'Failed to connect to Cloudbeds API'
+        message: error.message || 'Failed to connect to Cloudbeds API',
+        details: error.details || error.response?.data || null,
+        error: error.toString()
       };
     }
   }
 
   /**
-   * Check if tokens are configured
+   * Check if tokens or API key are configured
    */
   hasTokens() {
-    return !!(this.accessToken || this.refreshToken);
+    return !!(this.accessToken || this.refreshToken || this.apiKey);
   }
 }
 

@@ -157,9 +157,13 @@ class CloudbedsController {
       }
 
       const calendar = await cloudbedsService.getCalendarAvailability(startDate, endDate);
-      return response.success(res, calendar.data, 'Calendar availability retrieved');
+      
+      // Handle different response formats from Cloudbeds API
+      const calendarData = calendar.data || calendar || [];
+      return response.success(res, calendarData, 'Calendar availability retrieved');
     } catch (err) {
-      return response.error(res, err.message, err.statusCode || 500);
+      console.error('[Cloudbeds Controller] Calendar error:', err);
+      return response.error(res, err.message || 'Failed to retrieve calendar availability', err.statusCode || 500);
     }
   }
 
@@ -176,9 +180,15 @@ class CloudbedsController {
       }
 
       const gaps = await cloudbedsService.getAvailableGaps(startDate, endDate, parseInt(minNights));
-      return response.success(res, gaps.data, `Found ${gaps.totalGaps} available gaps`);
+      
+      // Handle different response formats
+      const gapsData = gaps.data || gaps.gaps || [];
+      const totalGaps = gaps.totalGaps || gaps.length || 0;
+      
+      return response.success(res, gapsData, `Found ${totalGaps} available gaps`);
     } catch (err) {
-      return response.error(res, err.message, err.statusCode || 500);
+      console.error('[Cloudbeds Controller] Gaps error:', err);
+      return response.error(res, err.message || 'Failed to retrieve available gaps', err.statusCode || 500);
     }
   }
 
