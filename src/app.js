@@ -14,25 +14,26 @@ app.use(helmet());
 // CORS configuration - supports multiple origins
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no origin (mobile apps, Postman, curl)
     if (!origin) return callback(null, true);
-    
-    const allowedOrigins = Array.isArray(config.cors.origin) 
-      ? config.cors.origin 
-      : [config.cors.origin];
-    
-    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+
+    const allowedOrigins = [
+      'https://bookingpms.netlify.app'
+    ];
+
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: config.cors.credentials,
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(cors(corsOptions));
+
 
 // Rate limiting
 const limiter = rateLimit({
