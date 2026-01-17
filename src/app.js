@@ -11,7 +11,7 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration - supports multiple origins
 app.use(cors({
   origin: 'https://bookingpms.netlify.app',
   credentials: true,
@@ -19,6 +19,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
