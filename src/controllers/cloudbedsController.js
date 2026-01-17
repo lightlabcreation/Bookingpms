@@ -14,6 +14,15 @@ class CloudbedsController {
   static async getStatus(req, res) {
     try {
       const status = await cloudbedsService.checkConnection();
+      // Add environment check for debugging
+      status.envCheck = {
+        hasApiKey: !!process.env.CLOUDBEDS_API_KEY,
+        hasClientId: !!process.env.CLOUDBEDS_CLIENT_ID,
+        hasClientSecret: !!process.env.CLOUDBEDS_CLIENT_SECRET,
+        nodeEnv: process.env.NODE_ENV || 'not set',
+        // Don't expose actual values, just check if they exist
+        apiKeyPrefix: process.env.CLOUDBEDS_API_KEY ? process.env.CLOUDBEDS_API_KEY.substring(0, 10) + '...' : 'not set'
+      };
       return response.success(res, status, 'Cloudbeds connection status');
     } catch (err) {
       return response.error(res, err.message, err.statusCode || 500);

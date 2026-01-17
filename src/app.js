@@ -18,7 +18,8 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
-      'https://bookingpms.netlify.app'
+      'https://bookingpms.netlify.app',
+      'https://localhost:5173'
     ];
 
     if (allowedOrigins.includes(origin)) {
@@ -32,8 +33,8 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
-app.use(cors(corsOptions));
 
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
