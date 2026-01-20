@@ -19,7 +19,8 @@ const corsOptions = {
 
     const allowedOrigins = [
       'https://bookingpms.netlify.app',
-      'https://localhost:5173'
+      'https://localhost:5173',
+      "https://booking.kiaantechnology.com"
     ];
 
     if (allowedOrigins.includes(origin)) {
