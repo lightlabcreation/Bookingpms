@@ -14,7 +14,7 @@ class CloudbedsController {
   static async getStatus(req, res) {
     try {
       const status = await cloudbedsService.checkConnection();
-      
+
       // Detailed environment check for Railway debugging
       const envCheck = {
         nodeEnv: process.env.NODE_ENV || 'not set',
@@ -34,7 +34,7 @@ class CloudbedsController {
           length: process.env[key] ? process.env[key].length : 0
         }))
       };
-      
+
       status.envCheck = envCheck;
       status.railwayDebug = {
         message: 'If running on Railway, check environment variables in Railway Dashboard',
@@ -43,7 +43,7 @@ class CloudbedsController {
           key => !process.env[key]
         )
       };
-      
+
       return response.success(res, status, 'Cloudbeds connection status');
     } catch (err) {
       console.error('[Cloudbeds Controller] Status error:', err);
@@ -58,7 +58,7 @@ class CloudbedsController {
   static async getEnvCheck(req, res) {
     try {
       const isRailway = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
-      
+
       const envInfo = {
         platform: isRailway ? 'Railway' : 'Local',
         nodeEnv: process.env.NODE_ENV || 'not set',
@@ -101,7 +101,7 @@ class CloudbedsController {
           step3: 'Restart the server'
         }
       };
-      
+
       return response.success(res, envInfo, 'Environment check completed');
     } catch (err) {
       console.error('[Cloudbeds Controller] Env check error:', err);
@@ -276,10 +276,10 @@ class CloudbedsController {
         const today = new Date();
         const threeMonthsLater = new Date();
         threeMonthsLater.setMonth(today.getMonth() + 3);
-        
+
         startDate = startDate || today.toISOString().split('T')[0];
         endDate = endDate || threeMonthsLater.toISOString().split('T')[0];
-        
+
         console.log('[Cloudbeds Controller] Using default date range:', { startDate, endDate });
       }
 
@@ -293,13 +293,13 @@ class CloudbedsController {
       }
 
       console.log('[Cloudbeds Controller] Calendar request - DIRECT DATA (no filters):', { startDate, endDate });
-      
+
       // Get direct data - no filtering, no processing
       const calendar = await cloudbedsService.getCalendarAvailability(startDate, endDate);
-      
+
       // Return direct data as-is - no filtering, no transformation
       const calendarData = calendar.data || calendar || [];
-      
+
       console.log('[Cloudbeds Controller] Calendar response - DIRECT DATA:', {
         success: calendar.success,
         dataLength: Array.isArray(calendarData) ? calendarData.length : 'not array',
@@ -307,7 +307,7 @@ class CloudbedsController {
         hasError: !!calendar.error,
         firstItem: Array.isArray(calendarData) && calendarData.length > 0 ? Object.keys(calendarData[0]) : 'empty'
       });
-      
+
       // Return raw data directly - no filtering
       return response.success(res, calendarData, 'Calendar availability retrieved (direct data)');
     } catch (err) {
@@ -330,11 +330,11 @@ class CloudbedsController {
       }
 
       const gaps = await cloudbedsService.getAvailableGaps(startDate, endDate, parseInt(minNights));
-      
+
       // Handle different response formats
       const gapsData = gaps.data || gaps.gaps || [];
       const totalGaps = gaps.totalGaps || gaps.length || 0;
-      
+
       return response.success(res, gapsData, `Found ${totalGaps} available gaps`);
     } catch (err) {
       console.error('[Cloudbeds Controller] Gaps error:', err);
@@ -367,13 +367,13 @@ class CloudbedsController {
    */
   static async getBookingUrl(req, res) {
     try {
-      const { checkIn, checkOut } = req.query;
+      const { checkIn, checkOut, roomTypeId } = req.query;
 
       if (!checkIn || !checkOut) {
         return response.badRequest(res, 'checkIn and checkOut are required');
       }
 
-      const url = cloudbedsService.getBookingUrl(checkIn, checkOut);
+      const url = cloudbedsService.getBookingUrl(checkIn, checkOut, roomTypeId);
       return response.success(res, { bookingUrl: url }, 'Booking URL generated');
     } catch (err) {
       return response.error(res, err.message, err.statusCode || 500);

@@ -209,10 +209,14 @@ class CloudbedsService {
     }
   }
 
-  getBookingUrl(checkIn, checkOut) {
+  getBookingUrl(checkIn, checkOut, roomTypeId = null) {
     // Amplitude Coliving uses the 'us2' cluster
     const propertyCode = '67942i';
-    return `https://us2.cloudbeds.com/en/reservation/${propertyCode}?checkin=${checkIn}&checkout=${checkOut}&currency=usd`;
+    let url = `https://us2.cloudbeds.com/en/reservation/${propertyCode}?checkin=${checkIn}&checkout=${checkOut}&currency=usd`;
+    if (roomTypeId) {
+      url += `&room_type_id=${roomTypeId}`;
+    }
+    return url;
   }
 
   async checkConnection() {
