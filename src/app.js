@@ -14,26 +14,31 @@ app.use(helmet());
 // CORS configuration - supports multiple origins
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, curl)
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-
-    const allowedOrigins = [
-      'https://bookingpms.netlify.app',
-      'https://localhost:5173',
-      "https://booking.kiaantechnology.com"
-    ];
-
-    if (allowedOrigins.includes(origin)) {
+    
+    const allowedOrigins = Array.isArray(config.cors.origin) 
+      ? config.cors.origin 
+      : [config.cors.origin];
+    
+    // Normalize origins (remove trailing slash for comparison)
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    const normalizedAllowed = allowedOrigins.map(o => o.replace(/\/$/, ''));
+    
+    if (normalizedAllowed.indexOf(normalizedOrigin) !== -1 || 
+        normalizedAllowed.includes('*') ||
+        normalizedOrigin.includes('bookingpms.netlify.app')) {
       callback(null, true);
     } else {
+      console.log('[CORS] Blocked origin:', origin);
+      console.log('[CORS] Allowed origins:', normalizedAllowed);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true,
+  credentials: config.cors.credentials,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
-
 
 app.use(cors(corsOptions));
 

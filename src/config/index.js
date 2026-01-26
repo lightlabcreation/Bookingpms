@@ -42,6 +42,9 @@ module.exports = {
     clientId: process.env.CLOUDBEDS_CLIENT_ID,
     clientSecret: process.env.CLOUDBEDS_CLIENT_SECRET,
     apiKey: process.env.CLOUDBEDS_API_KEY,
-    hotelSlug: process.env.CLOUDBEDS_HOTEL_SLUG || 'hotel'
+    hotelSlug: process.env.CLOUDBEDS_HOTEL_SLUG || 'hotel',
+    propertyID: process.env.CLOUDBEDS_PROPERTY_ID || null,
+    // Base URL for API. Default api.cloudbeds.com (getAvailability). If 404, try: CLOUDBEDS_API_BASE_URL=https://hotels.cloudbeds.com/api/v1.1
+    apiBaseUrl: process.env.CLOUDBEDS_API_BASE_URL || 'https://api.cloudbeds.com/api/v1.1'
   }
 };

@@ -229,14 +229,43 @@ class CloudbedsController {
       const availability = await cloudbedsService.getAvailability(startDate, endDate, parseInt(rooms));
       return response.success(res, availability.data, 'Availability retrieved');
     } catch (err) {
-      return response.error(res, err.message, err.statusCode || 500);
+      const details = err.details != null ? { cloudbeds: err.details, url: err._url } : undefined;
+      return response.error(res, err.message, err.statusCode || 500, details);
+    }
+  }
+
+  /**
+   * Get availability grid for calendar: room types (rows) x dates (columns).
+   * GET /api/cloudbeds/availability-grid?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+   * Default: next 30 days from today. Used by read-only guest availability calendar.
+   */
+  static async getAvailabilityGrid(req, res) {
+    try {
+      let { startDate, endDate } = req.query;
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+      if (!startDate || !dateRegex.test(startDate)) {
+        const t = new Date();
+        startDate = t.toISOString().slice(0, 10);
+      }
+      if (!endDate || !dateRegex.test(endDate)) {
+        const e = new Date(startDate);
+        e.setUTCDate(e.getUTCDate() + 30);
+        endDate = e.toISOString().slice(0, 10);
+      }
+
+      const grid = await cloudbedsService.getAvailabilityGrid(startDate, endDate);
+      return response.success(res, grid, 'Availability grid retrieved');
+    } catch (err) {
+      const details = err.details != null ? { cloudbeds: err.details, url: err._url } : undefined;
+      return response.error(res, err.message, err.statusCode || 500, details);
     }
   }
 
   /**
    * Get calendar availability (day-by-day)
-   * GET /api/cloudbeds/calendar (dates optional - uses default range if not provided)
-   * GET /api/cloudbeds/calendar?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+   * GET /api/cloudbeds/calendar - Direct data, no filters
+   * GET /api/cloudbeds/calendar?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD - Optional date filter
    */
   static async getCalendarAvailability(req, res) {
     try {
@@ -263,22 +292,24 @@ class CloudbedsController {
         return response.badRequest(res, 'endDate must be in YYYY-MM-DD format');
       }
 
-      console.log('[Cloudbeds Controller] Calendar request (no filters):', { startDate, endDate });
+      console.log('[Cloudbeds Controller] Calendar request - DIRECT DATA (no filters):', { startDate, endDate });
       
-      // Get direct data without any filtering
+      // Get direct data - no filtering, no processing
       const calendar = await cloudbedsService.getCalendarAvailability(startDate, endDate);
       
-      // Return direct data - no filtering, no processing
+      // Return direct data as-is - no filtering, no transformation
       const calendarData = calendar.data || calendar || [];
       
-      console.log('[Cloudbeds Controller] Calendar response:', {
+      console.log('[Cloudbeds Controller] Calendar response - DIRECT DATA:', {
         success: calendar.success,
         dataLength: Array.isArray(calendarData) ? calendarData.length : 'not array',
-        hasError: !!calendar.error
+        dataType: Array.isArray(calendarData) ? 'array' : typeof calendarData,
+        hasError: !!calendar.error,
+        firstItem: Array.isArray(calendarData) && calendarData.length > 0 ? Object.keys(calendarData[0]) : 'empty'
       });
       
-      // Return raw data directly
-      return response.success(res, calendarData, 'Calendar availability retrieved');
+      // Return raw data directly - no filtering
+      return response.success(res, calendarData, 'Calendar availability retrieved (direct data)');
     } catch (err) {
       console.error('[Cloudbeds Controller] Calendar error:', err);
       // Return empty array instead of error - don't crash
