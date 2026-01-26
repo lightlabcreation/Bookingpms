@@ -15,7 +15,8 @@ module.exports = {
       : [
           'http://localhost:5173',
           'https://bookingpms.netlify.app',
-          'https://bookingpms.netlify.app/'
+          'https://bookingpms.netlify.app',
+          'https://pms.kiaantechnology.com'
         ],
     credentials: true
   },

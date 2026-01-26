@@ -39,7 +39,7 @@ DATABASE_URL="mysql://root:password@localhost:3306/bookingpms"
 # Server Configuration
 PORT=5000
 NODE_ENV=development
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=https://pms.kiaantechnology.com
 
 # JWT Configuration
 JWT_SECRET=your-secret-key-change-in-production
